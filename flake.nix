@@ -23,12 +23,6 @@
 
         dontNpmBuild = true;
 
-        installPhase = ''
-          mkdir -p $out/bin
-          cp src/index.js $out/bin/pomodoro
-          chmod +x $out/bin/pomodoro
-        '';
-
         postFixup = ''
           substituteInPlace $out/bin/pomodoro \
             --replace '#!/usr/bin/env node' '#!${pkgs.nodejs_20}/bin/node'
