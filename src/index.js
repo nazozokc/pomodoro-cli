@@ -38,10 +38,10 @@ function getProgressBar(remaining, total, width = 20) {
 
 function renderTimer() {
   const { state, remaining, session, totalSessions, isPaused } = timerState;
-  
+
   let status = '';
   let color = '';
-  
+
   switch (state) {
     case STATE.WORKING:
       status = '作業中 🍅';
@@ -61,8 +61,8 @@ function renderTimer() {
     remaining,
     state === STATE.IDLE ? WORK_TIME : remaining
   );
-  
-  const sessionInfo = state !== STATE.IDLE 
+
+  const sessionInfo = state !== STATE.IDLE
     ? `(${session}/${totalSessions})`
     : '';
 
@@ -75,7 +75,7 @@ function renderTimer() {
     ' ╠═══════════════════════════════╣',
     ` ║  ${color}${formatTime(remaining)}\x1b[0m                      ║`,
     ` ║  ${progress} ${sessionInfo}${pauseIndicator.padStart(18 - sessionInfo.length - pauseIndicator.length)}  ║`,
-    ` ║  ${status.padStart(24)}║`,
+    ` ║  ${status.padStart(24)}  ║`,
     ' ╚═══════════════════════════════╝',
     '',
   ];
@@ -98,7 +98,7 @@ async function tick() {
 
 async function handleTimerComplete() {
   const wasWorking = timerState.state === STATE.WORKING;
-  
+
   if (wasWorking) {
     if (timerState.session >= SESSIONS_BEFORE_LONG_BREAK) {
       timerState.state = STATE.BREAK;
@@ -125,7 +125,7 @@ async function handleTimerComplete() {
       timerState.isPaused = false;
     }
   }
-  
+
   renderTimer();
 }
 
@@ -193,7 +193,7 @@ async function handleSettings() {
   });
 
   const minutes = parseInt(value);
-  
+
   switch (setting) {
     case 'work':
       WORK_TIME = minutes * 60;
