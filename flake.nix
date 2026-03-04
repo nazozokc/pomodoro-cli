@@ -21,6 +21,8 @@
         npmDepsHash = "sha256-L8rYb+Nt45DHBJNguobhtG1IuujvnOSDbTsYVndXoN4=";
         nodejs = pkgs.nodejs_20;
 
+        dontNpmBuild = true;
+
         installPhase = ''
           mkdir -p $out/bin
           cp src/index.js $out/bin/pomodoro
