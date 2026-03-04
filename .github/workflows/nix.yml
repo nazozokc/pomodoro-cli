@@ -1,0 +1,32 @@
+name: nix-flake-check
+
+on:
+  push:
+    tags:
+      - "v*"
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v13
+
+      - name: Enable flakes
+        run: |
+          echo "experimental-features = nix-command flakes" | sudo tee -a /etc/nix/nix.conf
+
+      - name: Nix flake check
+        run: nix flake check
+
+      - name: Build package
+        run: nix build .#
+
+      - name: Run CLI
+        run: nix run .# -- --version
+
