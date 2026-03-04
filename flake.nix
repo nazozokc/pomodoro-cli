@@ -14,7 +14,7 @@
     {
       packages.${system}.default = pkgs.buildNpmPackage {
         pname = "pomodoro-cli";
-        version = "1.1.0";
+        version = "1.2.0";
 
         src = pkgs.lib.cleanSource ./.;
 
