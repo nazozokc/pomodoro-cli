@@ -35,6 +35,11 @@
         '';
       };
 
+      apps.${system}.default = {
+        type = "app";
+        program = "${self.packages.${system}.default}/bin/pomodoro";
+      };
+
       devShells.${system}.default = pkgs.mkShell {
         packages = [
           pkgs.nodejs_20
