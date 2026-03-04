@@ -23,70 +23,102 @@ let timerState = {
   isPaused: false,
 };
 
+// ANSI helpers
+const c = {
+  reset: '\x1b[0m',
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  cyan: '\x1b[36m',
+  white: '\x1b[97m',
+  bgRed: '\x1b[41m',
+  bgGreen: '\x1b[42m',
+  bgCyan: '\x1b[46m',
+};
+
 function formatTime(seconds) {
   const m = Math.floor(seconds / 60).toString().padStart(2, '0');
   const s = (seconds % 60).toString().padStart(2, '0');
   return `${m}:${s}`;
 }
 
-function getProgressBar(remaining, total, width = 20) {
-  const ratio = (total - remaining) / total;
+function getProgressBar(remaining, total, width = 24) {
+  const ratio = Math.max(0, Math.min(1, (total - remaining) / total));
   const filled = Math.floor(ratio * width);
   const empty = width - filled;
-  return '█'.repeat(filled) + '░'.repeat(empty);
+  return `${c.green}${'█'.repeat(filled)}${c.reset}${c.dim}${'░'.repeat(empty)}${c.reset}`;
+}
+
+// Pad a raw string (with ANSI codes) to visible length `len`
+function padVisible(str, len, char = ' ') {
+  const visible = str.replace(/\x1b\[[0-9;]*m/g, '');
+  const pad = Math.max(0, len - visible.length);
+  return str + char.repeat(pad);
 }
 
 function renderTimer() {
   const { state, remaining, session, totalSessions, isPaused } = timerState;
 
-  let status = '';
-  let color = '';
-
+  // ── State-specific config ─────────────────────────────
+  let stateLabel, accentColor, totalTime;
   switch (state) {
     case STATE.WORKING:
-      status = '作業中 🍅';
-      color = '\x1b[31m';
+      stateLabel = '作業中  🍅';
+      accentColor = c.red;
+      totalTime = WORK_TIME;
       break;
     case STATE.BREAK:
-      status = '休憩中 ☕';
-      color = '\x1b[32m';
+      stateLabel = '休憩中  ☕';
+      accentColor = c.green;
+      totalTime = remaining <= SHORT_BREAK ? SHORT_BREAK : LONG_BREAK;
       break;
-    case STATE.IDLE:
     default:
-      status = '待機中';
-      color = '\x1b[36m';
+      stateLabel = '待機中  💤';
+      accentColor = c.cyan;
+      totalTime = WORK_TIME;
   }
 
-  const progress = getProgressBar(
-    remaining,
-    state === STATE.IDLE ? WORK_TIME : remaining
-  );
-
-  const sessionInfo = state !== STATE.IDLE
-    ? `(${session}/${totalSessions})`
+  const timeStr = `${c.bold}${accentColor}${formatTime(remaining)}${c.reset}`;
+  const bar = getProgressBar(remaining, totalTime);
+  const sessionStr = state !== STATE.IDLE
+    ? `${c.dim}${session}/${totalSessions}${c.reset}`
+    : `${c.dim}─/─${c.reset}`;
+  const pauseStr = isPaused
+    ? `  ${c.yellow}⏸ 停止中${c.reset}`
     : '';
 
-  const pauseIndicator = isPaused ? ' ⏸ 一時停止中' : '';
+  // Inner width (visible chars between │ and │, including 2-space indent each side)
+  const W = 33;
 
-  const lines = [
+  const line = (inner) => ` │ ${padVisible(inner, W - 2)} │`;
+
+  const sep = ` ├${'─'.repeat(W)}┤`;
+  const top = ` ╭${'─'.repeat(W)}╮`;
+  const bot = ` ╰${'─'.repeat(W)}╯`;
+
+  const title = `${c.bold}${c.white}🍅  Pomodoro Timer  🍅${c.reset}`;
+
+  const rows = [
     '',
-    ' ╔═══════════════════════════════╗',
-    ' ║      🍅 Pomodoro Timer 🍅     ║',
-    ' ╠═══════════════════════════════╣',
-    ` ║  ${color}${formatTime(remaining)}\x1b[0m                      ║`,
-    ` ║  ${progress} ${sessionInfo}${pauseIndicator.padStart(18 - sessionInfo.length - pauseIndicator.length)}  ║`,
-    ` ║  ${status.padStart(24)}  ║`,
-    ' ╚═══════════════════════════════╝',
+    top,
+    line(padVisible(title, W - 2)),        // title (centered manually via spaces)
+    sep,
+    line(''),
+    line(`  ${timeStr}   ${sessionStr}${pauseStr}`),
+    line(`  ${bar}`),
+    line(`  ${stateLabel}`),
+    line(''),
+    bot,
     '',
   ];
 
-  logUpdate(lines.join('\n'));
+  logUpdate(rows.join('\n'));
 }
 
 async function tick() {
-  if (timerState.state === STATE.IDLE || timerState.isPaused) {
-    return;
-  }
+  if (timerState.state === STATE.IDLE || timerState.isPaused) return;
 
   timerState.remaining--;
   renderTimer();
@@ -144,34 +176,32 @@ function stopTimerLoop() {
 }
 
 async function showMenu() {
-  const choice = await select({
+  return select({
     message: 'アクションを選択:',
     choices: [
-      { name: '▶ 開始 (Start)', value: 'start' },
-      { name: '⏹ 停止 (Stop)', value: 'stop' },
-      { name: '🔄 リセット (Reset)', value: 'reset' },
-      { name: '⚙ 設定 (Settings)', value: 'settings' },
-      { name: '❌ 終了 (Exit)', value: 'exit' },
+      { name: '▶  開始 (Start)', value: 'start' },
+      { name: '⏸  停止 (Pause)', value: 'stop' },
+      { name: '🔄  リセット (Reset)', value: 'reset' },
+      { name: '⚙   設定 (Settings)', value: 'settings' },
+      { name: '❌  終了 (Exit)', value: 'exit' },
     ],
   });
-
-  return choice;
 }
 
 async function handleSettings() {
   const currentValues = {
-    work: Math.floor((timerState.state === STATE.IDLE ? timerState.remaining : WORK_TIME) / 60),
-    shortBreak: SHORT_BREAK / 60,
-    longBreak: LONG_BREAK / 60,
+    work: Math.floor(WORK_TIME / 60),
+    shortBreak: Math.floor(SHORT_BREAK / 60),
+    longBreak: Math.floor(LONG_BREAK / 60),
     sessions: timerState.totalSessions,
   };
 
   const setting = await select({
     message: '設定を変更:',
     choices: [
-      { name: `作業時間 (現在: ${currentValues.work}分)`, value: 'work' },
-      { name: `短い休憩 (現在: ${currentValues.shortBreak}分)`, value: 'shortBreak' },
-      { name: `長い休憩 (現在: ${currentValues.longBreak}分)`, value: 'longBreak' },
+      { name: `作業時間   (現在: ${currentValues.work}分)`, value: 'work' },
+      { name: `短い休憩   (現在: ${currentValues.shortBreak}分)`, value: 'shortBreak' },
+      { name: `長い休憩   (現在: ${currentValues.longBreak}分)`, value: 'longBreak' },
       { name: `セッション数 (現在: ${currentValues.sessions})`, value: 'sessions' },
       { name: '← 戻る', value: 'back' },
     ],
@@ -179,17 +209,10 @@ async function handleSettings() {
 
   if (setting === 'back') return;
 
-  const defaults = {
-    work: currentValues.work,
-    shortBreak: currentValues.shortBreak,
-    longBreak: currentValues.longBreak,
-    sessions: currentValues.sessions,
-  };
-
   const value = await input({
-    message: `${setting}の値を入力 (分):`,
-    default: defaults[setting].toString(),
-    validate: (v) => !isNaN(v) && parseInt(v) > 0 || '正の数を入力してください',
+    message: `${setting} の値を入力 (分):`,
+    default: currentValues[setting].toString(),
+    validate: (v) => (!isNaN(v) && parseInt(v) > 0) || '正の数を入力してください',
   });
 
   const minutes = parseInt(value);
@@ -198,19 +221,19 @@ async function handleSettings() {
     case 'work':
       WORK_TIME = minutes * 60;
       if (timerState.state === STATE.IDLE) timerState.remaining = WORK_TIME;
-      consola.success(`作業時間を${minutes}分に設定しました`);
+      consola.success(`作業時間を ${minutes} 分に設定しました`);
       break;
     case 'shortBreak':
       SHORT_BREAK = minutes * 60;
-      consola.success(`短い休憩を${minutes}分に設定しました`);
+      consola.success(`短い休憩を ${minutes} 分に設定しました`);
       break;
     case 'longBreak':
       LONG_BREAK = minutes * 60;
-      consola.success(`長い休憩を${minutes}分に設定しました`);
+      consola.success(`長い休憩を ${minutes} 分に設定しました`);
       break;
     case 'sessions':
       timerState.totalSessions = minutes;
-      consola.success(`セッション数を${minutes}に設定しました`);
+      consola.success(`セッション数を ${minutes} に設定しました`);
       break;
   }
 }
