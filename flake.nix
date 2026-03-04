@@ -8,33 +8,34 @@
   outputs =
     { self, nixpkgs }:
     let
-      pkgs = nixpkgs.legacyPackages.x86_64-linux;
+      system = "x86_64-linux";
+      pkgs = nixpkgs.legacyPackages.${system};
     in
     {
-      packages.x86_64-linux.default = pkgs.stdenv.mkDerivation {
+      packages.${system}.default = pkgs.buildNpmPackage {
         pname = "pomodoro-cli";
         version = "1.0.0";
-        src = self;
-        buildInputs = [
-          pkgs.nodejs_20
-          pkgs.pnpm
-        ];
-        buildPhase = ''
-          pnpm install --frozen-lockfile --ignore-scripts
-        '';
+
+        src = pkgs.lib.cleanSource ./.;
+
+        npmDepsHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+
         installPhase = ''
           mkdir -p $out/bin
           cp src/index.js $out/bin/pomodoro
           chmod +x $out/bin/pomodoro
         '';
+
         postFixup = ''
           substituteInPlace $out/bin/pomodoro \
             --replace '#!/usr/bin/env node' '#!${pkgs.nodejs_20}/bin/node'
         '';
+
+        nodejs = pkgs.nodejs_20;
       };
 
-      devShells.x86_64-linux.default = pkgs.mkShell {
-        buildInputs = [
+      devShells.${system}.default = pkgs.mkShell {
+        packages = [
           pkgs.nodejs_20
           pkgs.pnpm
         ];
