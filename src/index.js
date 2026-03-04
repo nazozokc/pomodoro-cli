@@ -1,8 +1,20 @@
 #!/usr/bin/env node
 
 import { select, input } from '@inquirer/prompts';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import logUpdate from 'log-update';
 import consola from 'consola';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const pkg = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8'));
+
+if (process.argv.includes('--version')) {
+  console.log(pkg.version);
+  process.exit(0);
+}
 
 let WORK_TIME = 25 * 60;
 let SHORT_BREAK = 5 * 60;
