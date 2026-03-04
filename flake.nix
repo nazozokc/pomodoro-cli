@@ -1,3 +1,5 @@
+{
+  description = "CLI Pomodoro Timer";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
@@ -17,7 +19,7 @@
 
         src = pkgs.lib.cleanSource ./.;
 
-npmDepsHash = "sha256-IoIfDixFoEPG3bcXRWzR7mjwIaL8fURBRj4uJpWgx90=";
+        npmDepsHash = "sha256-IoIfDixFoEPG3bcXRWzR7mjwIaL8fURBRj4uJpWgx90=";
         nodejs = pkgs.nodejs_20;
 
         dontNpmBuild = true;
