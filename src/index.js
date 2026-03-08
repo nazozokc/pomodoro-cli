@@ -35,6 +35,8 @@ let timerState = {
   isPaused: false,
 };
 
+let isMenuOpen = false;
+
 // ── ANSI ─────────────────────────────────────────────────
 const c = {
   reset: '\x1b[0m',
@@ -150,6 +152,7 @@ function getSessionDots(session, total) {
 
 // ── タイマー描画 ──────────────────────────────────────────
 function renderTimer() {
+  if (isMenuOpen) return;
   const { state, remaining, session, totalSessions, isPaused } = timerState;
 
   const isIdle = state === STATE.IDLE;
@@ -302,7 +305,8 @@ function stopTimerLoop() {
 
 // ── メニュー ──────────────────────────────────────────────
 async function showMenu() {
-  return select({
+  isMenuOpen = true;
+  const result = await select({
     message: 'アクションを選択:',
     choices: [
       { name: '▶   Start    開始', value: 'start' },
@@ -312,9 +316,12 @@ async function showMenu() {
       { name: '×   Exit     終了', value: 'exit' },
     ],
   });
+  isMenuOpen = false;
+  return result;
 }
 
 async function handleSettings() {
+  isMenuOpen = true;
   const cur = {
     work: Math.floor(WORK_TIME / 60),
     shortBreak: Math.floor(SHORT_BREAK / 60),
@@ -333,13 +340,18 @@ async function handleSettings() {
     ],
   });
 
-  if (setting === 'back') return;
+  if (setting === 'back') {
+    isMenuOpen = false;
+    return;
+  }
 
   const value = await input({
     message: `新しい値を入力 (分):`,
     default: cur[setting].toString(),
     validate: (v) => (!isNaN(v) && parseInt(v) > 0) || '正の整数を入力してください',
   });
+
+  isMenuOpen = false;
 
   const minutes = parseInt(value);
 
