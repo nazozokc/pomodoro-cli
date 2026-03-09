@@ -8,24 +8,37 @@
   outputs =
     { self, nixpkgs }:
     let
-      system = "x86_64-linux";
-      pkgs = nixpkgs.legacyPackages.${system};
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+        "x86_64-darwin"
+        "aarch64-darwin"
+      ];
+      forAllSystems = nixpkgs.lib.genAttrs systems;
     in
     {
-      packages.${system}.default = pkgs.buildNpmPackage {
-        pname = "pomodoro-cli";
-        version = "1.2.0";
+      packages = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+        in
+        {
+          default = pkgs.buildNpmPackage {
+            pname = "pomodoro-cli";
+            version = "1.2.0";
+            src = self;
+            npmDepsHash = "sha256-Q38fJLAU7rYrA1EKSAx0L631rxx1Hnp4yPyAMLe2isQ=";
+            nodejs = pkgs.nodejs_20;
+            dontNpmBuild = true;
+          };
+        }
+      );
 
-        src = self;
-
-        npmDepsHash = "sha256-Q38fJLAU7rYrA1EKSAx0L631rxx1Hnp4yPyAMLe2isQ=";
-        nodejs = pkgs.nodejs_20;
-        dontNpmBuild = true;
-      };
-
-      apps.${system}.default = {
-        type = "app";
-        program = "${self.packages.${system}.default}/bin/pomodoro";
-      };
+      apps = forAllSystems (system: {
+        default = {
+          type = "app";
+          program = "${self.packages.${system}.default}/bin/pomodoro";
+        };
+      });
     };
 }
