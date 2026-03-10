@@ -25,7 +25,7 @@
             pname = "pomodoro-cli";
             version = "1.2.0";
             src = self;
-            npmDepsHash = pkgs.lib.fakeHash;
+            npmDepsHash = "sha256-JfxaEc7pCP4rXlkvvNypEn7esZEDAq/rUFDxvCLDhLg=";
             nodejs = pkgs.nodejs_20;
             dontNpmBuild = true;
           };
