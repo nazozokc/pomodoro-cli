@@ -36,6 +36,7 @@ let timerState = {
   session: 1,
   totalSessions: SESSIONS_BEFORE_LONG_BREAK,
   isPaused: false,
+  breakType: null, // [fix] 'short' | 'long' | null
 };
 
 // ── ANSI ─────────────────────────────────────────────────
@@ -62,11 +63,11 @@ function displayWidth(str) {
     const cp = ch.codePointAt(0);
     if (
       (cp >= 0x1F000 && cp <= 0x1FFFF) ||
-      (cp >= 0x2600  && cp <= 0x27BF)  ||
-      (cp >= 0x3000  && cp <= 0x9FFF)  ||
-      (cp >= 0xF900  && cp <= 0xFAFF)  ||
-      (cp >= 0xFE30  && cp <= 0xFE4F)  ||
-      (cp >= 0xFF00  && cp <= 0xFF60)
+      (cp >= 0x2600 && cp <= 0x27BF) ||
+      (cp >= 0x3000 && cp <= 0x9FFF) ||
+      (cp >= 0xF900 && cp <= 0xFAFF) ||
+      (cp >= 0xFE30 && cp <= 0xFE4F) ||
+      (cp >= 0xFF00 && cp <= 0xFF60)
     ) {
       width += 2;
     } else {
@@ -109,7 +110,7 @@ function getProgressBar(remaining, total, width = 30) {
 function getSessionDots(session, total) {
   return Array.from({ length: total }, (_, i) => {
     const n = i + 1;
-    if (n < session)  return `${c.smoke}◆${c.reset}`;
+    if (n < session) return `${c.smoke}◆${c.reset}`;
     if (n === session) return `${timerState.state === STATE.WORKING ? c.amber : c.mint}${c.bold}◆${c.reset}`;
     return `${c.charcoal}◇${c.reset}`;
   }).join(' ');
@@ -117,11 +118,11 @@ function getSessionDots(session, total) {
 
 // ── ボックス描画ヘルパー ──────────────────────────────────
 const W = 40;
-const top   = () => `${c.gray}╭${'─'.repeat(W + 2)}╮${c.reset}`;
-const sep   = () => `${c.gray}├${'─'.repeat(W + 2)}┤${c.reset}`;
-const bot   = () => `${c.gray}╰${'─'.repeat(W + 2)}╯${c.reset}`;
+const top = () => `${c.gray}╭${'─'.repeat(W + 2)}╮${c.reset}`;
+const sep = () => `${c.gray}├${'─'.repeat(W + 2)}┤${c.reset}`;
+const bot = () => `${c.gray}╰${'─'.repeat(W + 2)}╯${c.reset}`;
 const blank = () => `${c.gray}│${c.reset}${' '.repeat(W + 2)}${c.gray}│${c.reset}`;
-const row   = (inner) => `${c.gray}│${c.reset} ${padDisplay(inner, W)} ${c.gray}│${c.reset}`;
+const row = (inner) => `${c.gray}│${c.reset} ${padDisplay(inner, W)} ${c.gray}│${c.reset}`;
 
 // ── 通知 ─────────────────────────────────────────────────
 function notify(text, color = c.mint, ms = 2000) {
@@ -130,44 +131,46 @@ function notify(text, color = c.mint, ms = 2000) {
 
 // ── タイマー行 ────────────────────────────────────────────
 function buildTimerRows() {
-  const { state, remaining, session, totalSessions, isPaused } = timerState;
-  const isIdle    = state === STATE.IDLE;
+  const { state, remaining, session, totalSessions, isPaused, breakType } = timerState;
+  const isIdle = state === STATE.IDLE;
   const isWorking = state === STATE.WORKING;
-  const isBreak   = state === STATE.BREAK;
-  const accent    = isWorking ? c.amber : isBreak ? c.mint : c.slate;
+  const isBreak = state === STATE.BREAK;
+  const accent = isWorking ? c.amber : isBreak ? c.mint : c.slate;
+
+  // [fix] breakType で明示的に判定
   const totalTime = isWorking
     ? WORK_TIME
     : isBreak
-    ? (remaining <= SHORT_BREAK ? SHORT_BREAK : LONG_BREAK)
-    : WORK_TIME;
+      ? (breakType === 'long' ? LONG_BREAK : SHORT_BREAK)
+      : WORK_TIME;
 
   // 時間 + 状態 (両端揃え)
-  const timeRaw   = formatTime(remaining);                         // e.g. "25:00"
-  const pauseTag  = isPaused ? `  ${c.yellow}⏸${c.reset}` : '';
-  const leftPart  = ` ${c.bold}${accent}${timeRaw}${c.reset}${pauseTag}`;
-  const leftW     = 1 + 5 + (isPaused ? 3 : 0);
+  const timeRaw = formatTime(remaining);
+  const pauseTag = isPaused ? `  ${c.yellow}⏸${c.reset}` : '';
+  const leftPart = ` ${c.bold}${accent}${timeRaw}${c.reset}${pauseTag}`;
+  const leftW = 1 + 5 + (isPaused ? 3 : 0);
 
   const stateWord = isWorking ? 'FOCUS' : isBreak ? 'BREAK' : 'IDLE';
   const rightPart = `${accent}●  ${stateWord}${c.reset}`;
-  const rightW    = 1 + 2 + stateWord.length;
+  const rightW = 1 + 2 + stateWord.length;
 
   const midSpaces = Math.max(2, W - leftW - rightW);
-  const timeLine  = `${leftPart}${' '.repeat(midSpaces)}${rightPart}`;
+  const timeLine = `${leftPart}${' '.repeat(midSpaces)}${rightPart}`;
 
-  // プログレスバー (1 space + bar + 2 spaces + 4 chars pct)
-  const barW  = W - 7;
-  const bar   = getProgressBar(remaining, totalTime, barW);
-  const pct   = isIdle
+  // プログレスバー
+  const barW = W - 7;
+  const bar = getProgressBar(remaining, totalTime, barW);
+  const pct = isIdle
     ? `${c.charcoal}  ─%${c.reset}`
     : `${c.smoke}${Math.round(((totalTime - remaining) / totalTime) * 100).toString().padStart(3)}%${c.reset}`;
   const barLine = ` ${bar}  ${pct}`;
 
-  // セッションドット + カウンター (右寄せ)
-  const dots        = getSessionDots(session, totalSessions);
+  // セッションドット + カウンター
+  const dots = getSessionDots(session, totalSessions);
   const counterText = `${session}/${totalSessions}`;
-  const counter     = `${c.charcoal}${counterText}${c.reset}`;
-  const dotsField   = padDisplay(` ${dots}`, W - counterText.length);
-  const dotsLine    = `${dotsField}${counter}`;
+  const counter = `${c.charcoal}${counterText}${c.reset}`;
+  const dotsField = padDisplay(` ${dots}`, W - counterText.length);
+  const dotsLine = `${dotsField}${counter}`;
 
   return [
     blank(),
@@ -195,19 +198,18 @@ function buildHintRow() {
 
 // ── メニュー行 ────────────────────────────────────────────
 const MENU_ITEMS = [
-  { label: '▶  Start      開始',     key: 's' },
-  { label: '⏸  Pause      停止',     key: 'p' },
+  { label: '▶  Start      開始', key: 's' },
+  { label: '⏸  Pause      停止', key: 'p' },
   { label: '↺  Reset      リセット', key: 'r' },
-  { label: '⚙  Settings   設定',     key: 'c' },
-  { label: '×  Exit       終了',     key: 'q' },
+  { label: '⚙  Settings   設定', key: 'c' },
+  { label: '×  Exit       終了', key: 'q' },
 ];
 
 function buildMenuRows() {
   const items = MENU_ITEMS.map((item, i) => {
-    const sel    = i === menuIndex;
-    // ❯ は U+276F (0x2600-0x27BF 内) → displayWidth = 2 なので非選択時は空白2つ
+    const sel = i === menuIndex;
     const cursor = sel ? `${c.amber}${c.bold}❯${c.reset}` : '  ';
-    const label  = sel
+    const label = sel
       ? `${c.white}${c.bold}${item.label}${c.reset}`
       : `${c.smoke}${item.label}${c.reset}`;
     return row(` ${cursor}  ${label}`);
@@ -222,19 +224,19 @@ function buildMenuRows() {
 // ── 設定選択行 ────────────────────────────────────────────
 function currentSettings() {
   return [
-    { label: `作業時間     ${String(Math.floor(WORK_TIME / 60)).padStart(2)} min`,    key: 'work' },
-    { label: `短い休憩     ${String(Math.floor(SHORT_BREAK / 60)).padStart(2)} min`,  key: 'shortBreak' },
-    { label: `長い休憩     ${String(Math.floor(LONG_BREAK / 60)).padStart(2)} min`,   key: 'longBreak' },
-    { label: `セッション数   ${timerState.totalSessions}`,                             key: 'sessions' },
-    { label: '← Back',                                                                 key: 'back' },
+    { label: `作業時間     ${String(Math.floor(WORK_TIME / 60)).padStart(2)} min`, key: 'work' },
+    { label: `短い休憩     ${String(Math.floor(SHORT_BREAK / 60)).padStart(2)} min`, key: 'shortBreak' },
+    { label: `長い休憩     ${String(Math.floor(LONG_BREAK / 60)).padStart(2)} min`, key: 'longBreak' },
+    { label: `セッション数   ${timerState.totalSessions}`, key: 'sessions' },
+    { label: '← Back', key: 'back' },
   ];
 }
 
 function buildSettingsRows() {
   const items = currentSettings().map((item, i) => {
-    const sel    = i === settingsIndex;
+    const sel = i === settingsIndex;
     const cursor = sel ? `${c.mint}${c.bold}❯${c.reset}` : '  ';
-    const label  = sel
+    const label = sel
       ? `${c.white}${c.bold}${item.label}${c.reset}`
       : `${c.smoke}${item.label}${c.reset}`;
     return row(` ${cursor}  ${label}`);
@@ -249,10 +251,10 @@ function buildSettingsRows() {
 // ── 入力行 ────────────────────────────────────────────────
 function buildInputRows() {
   const labels = {
-    work:       '作業時間 (分)',
+    work: '作業時間 (分)',
     shortBreak: '短い休憩 (分)',
-    longBreak:  '長い休憩 (分)',
-    sessions:   'セッション数',
+    longBreak: '長い休憩 (分)',
+    sessions: 'セッション数',
   };
   const labelStr = `${c.smoke}${labels[inputTarget] || ''}${c.reset}`;
   const inputStr = `${c.bold}${c.amber}${inputBuffer || ' '}▌${c.reset}`;
@@ -269,8 +271,8 @@ function buildInputRows() {
 // ── 全体描画 (単一ボックス) ───────────────────────────────
 function render() {
   const versionStr = `v${pkg.version}`;
-  const headerPad  = W - 1 - 8 - versionStr.length; // 1 space + POMODORO(8) + pad + version
-  const header     = ` ${c.bold}${c.white}POMODORO${c.reset}${' '.repeat(Math.max(0, headerPad))}${c.charcoal}${versionStr}${c.reset}`;
+  const headerPad = W - 1 - 8 - versionStr.length;
+  const header = ` ${c.bold}${c.white}POMODORO${c.reset}${' '.repeat(Math.max(0, headerPad))}${c.charcoal}${versionStr}${c.reset}`;
 
   const lines = [
     '',
@@ -317,42 +319,48 @@ function handleTimerComplete() {
   const wasWorking = timerState.state === STATE.WORKING;
 
   if (wasWorking) {
-    if (timerState.session >= SESSIONS_BEFORE_LONG_BREAK) {
-      timerState.state     = STATE.BREAK;
+    if (timerState.session >= timerState.totalSessions) {
+      // [fix] isPaused リセット追加、breakType を 'long' にセット
+      timerState.state = STATE.BREAK;
       timerState.remaining = LONG_BREAK;
-      timerState.session   = 1;
-      notify('🎉 4セッション完了！長い休憩 (15分)', c.amber);
+      timerState.session = 1;
+      timerState.isPaused = false;
+      timerState.breakType = 'long';
+      notify('🎉 全セッション完了！長い休憩', c.amber);
     } else {
-      timerState.state     = STATE.BREAK;
+      // [fix] breakType を 'short' にセット
+      timerState.state = STATE.BREAK;
       timerState.remaining = SHORT_BREAK;
-      timerState.isPaused  = false;
+      timerState.isPaused = false;
+      timerState.breakType = 'short';
       notify(`✓ セッション${timerState.session}完了！短い休憩 (5分)`, c.mint);
     }
   } else {
-    if (timerState.session < SESSIONS_BEFORE_LONG_BREAK) {
+    if (timerState.session < timerState.totalSessions) {
       timerState.session++;
     }
-    timerState.state     = STATE.WORKING;
+    timerState.state = STATE.WORKING;
     timerState.remaining = WORK_TIME;
-    timerState.isPaused  = false;
+    timerState.isPaused = false;
+    timerState.breakType = null;
     notify('▶ 作業開始！', c.amber);
   }
 }
 
 // ── キー操作 ──────────────────────────────────────────────
 function handleKey(key) {
-  const ESC    = '\x1b';
-  const UP     = '\x1b[A';
-  const DOWN   = '\x1b[B';
-  const ENTER  = '\r';
+  const ESC = '\x1b';
+  const UP = '\x1b[A';
+  const DOWN = '\x1b[B';
+  const ENTER = '\r';
   const CTRL_C = '\x03';
-  const BACK   = '\x7f';
+  const BACK = '\x7f';
 
   if (key === CTRL_C) exit();
 
   // ── timer モード ──
   if (mode === 'timer') {
-    if      (key === 'm') { mode = 'menu'; menuIndex = 0; }
+    if (key === 'm') { mode = 'menu'; menuIndex = 0; }
     else if (key === 's') actionStart();
     else if (key === 'p') actionPause();
     else if (key === 'r') actionReset();
@@ -363,13 +371,13 @@ function handleKey(key) {
 
   // ── menu モード ──
   if (mode === 'menu') {
-    if (key === UP)    menuIndex = (menuIndex - 1 + MENU_ITEMS.length) % MENU_ITEMS.length;
-    if (key === DOWN)  menuIndex = (menuIndex + 1) % MENU_ITEMS.length;
-    if (key === ESC)   mode = 'timer';
+    if (key === UP) menuIndex = (menuIndex - 1 + MENU_ITEMS.length) % MENU_ITEMS.length;
+    if (key === DOWN) menuIndex = (menuIndex + 1) % MENU_ITEMS.length;
+    if (key === ESC) mode = 'timer';
     if (key === ENTER) {
       const item = MENU_ITEMS[menuIndex];
       mode = 'timer';
-      if      (item.key === 's') actionStart();
+      if (item.key === 's') actionStart();
       else if (item.key === 'p') actionPause();
       else if (item.key === 'r') actionReset();
       else if (item.key === 'c') { mode = 'settings_select'; settingsIndex = 0; }
@@ -382,17 +390,17 @@ function handleKey(key) {
   // ── settings_select モード ──
   if (mode === 'settings_select') {
     const items = currentSettings();
-    if (key === UP)    settingsIndex = (settingsIndex - 1 + items.length) % items.length;
-    if (key === DOWN)  settingsIndex = (settingsIndex + 1) % items.length;
-    if (key === ESC)   mode = 'timer';
+    if (key === UP) settingsIndex = (settingsIndex - 1 + items.length) % items.length;
+    if (key === DOWN) settingsIndex = (settingsIndex + 1) % items.length;
+    if (key === ESC) mode = 'timer';
     if (key === ENTER) {
       const item = items[settingsIndex];
       if (item.key === 'back') {
         mode = 'timer';
       } else {
-        inputTarget  = item.key;
-        inputBuffer  = '';
-        mode         = 'settings_input';
+        inputTarget = item.key;
+        inputBuffer = '';
+        mode = 'settings_input';
       }
     }
     render();
@@ -424,8 +432,9 @@ function handleKey(key) {
 
 function actionStart() {
   if (timerState.state === STATE.IDLE) {
-    timerState.state     = STATE.WORKING;
+    timerState.state = STATE.WORKING;
     timerState.remaining = WORK_TIME;
+    timerState.breakType = null;
   }
   timerState.isPaused = false;
   notify('▶ Started', c.amber);
@@ -437,10 +446,11 @@ function actionPause() {
 }
 
 function actionReset() {
-  timerState.state     = STATE.IDLE;
+  timerState.state = STATE.IDLE;
   timerState.remaining = WORK_TIME;
-  timerState.session   = 1;
-  timerState.isPaused  = false;
+  timerState.session = 1;
+  timerState.isPaused = false;
+  timerState.breakType = null;
   notify('↺ Reset', c.smoke);
 }
 
@@ -450,9 +460,23 @@ function applySettings(key, val) {
       WORK_TIME = val * 60;
       if (timerState.state === STATE.IDLE) timerState.remaining = WORK_TIME;
       break;
-    case 'shortBreak': SHORT_BREAK = val * 60; break;
-    case 'longBreak':  LONG_BREAK  = val * 60; break;
-    case 'sessions':   timerState.totalSessions = val; break;
+    case 'shortBreak':
+      SHORT_BREAK = val * 60;
+      // 現在 short break 中なら残り時間も更新
+      if (timerState.state === STATE.BREAK && timerState.breakType === 'short') {
+        timerState.remaining = SHORT_BREAK;
+      }
+      break;
+    case 'longBreak':
+      LONG_BREAK = val * 60;
+      // 現在 long break 中なら残り時間も更新
+      if (timerState.state === STATE.BREAK && timerState.breakType === 'long') {
+        timerState.remaining = LONG_BREAK;
+      }
+      break;
+    case 'sessions':
+      timerState.totalSessions = val;
+      break;
   }
 }
 
