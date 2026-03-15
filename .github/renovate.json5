@@ -1,0 +1,49 @@
+// renovate.json5
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: [
+    "config:recommended",
+  ],
+
+  // PR を自動マージ（Dependabot と同じ挙動に合わせる）
+  automerge: true,
+  automergeType: "pr",
+  automergeStrategy: "squash",
+
+  // マージ前に CI が通るのを待つ
+  ignoreTests: false,
+
+  packageRules: [
+    // npm: patch / minor は自動マージ
+    {
+      matchManagers: ["npm"],
+      matchUpdateTypes: ["patch", "minor"],
+      automerge: true,
+    },
+    // npm: major は自動マージしない（手動確認）
+    {
+      matchManagers: ["npm"],
+      matchUpdateTypes: ["major"],
+      automerge: true,
+    },
+    // GitHub Actions: すべて自動マージ
+    {
+      matchManagers: ["github-actions"],
+      automerge: true,
+    },
+  ],
+
+  // flake.lock は既存の flake-update.yml で管理するので除外
+  ignorePaths: [
+    "flake.lock",
+    "flake.nix",
+    "**/*.nix",
+  ],
+
+  // PR のラベル
+  labels: ["dependencies"],
+
+  // スケジュール（毎日 JST 深夜）
+  schedule: ["every 3 hours"],
+  timezone: "Asia/Tokyo",
+}
