@@ -25,7 +25,7 @@ pomodoro
 
 | アクション | 説明 |
 |-----------|------|
-| 開始 | タイ時停止中は再開マーを開始（一） |
+| 開始 | タイマーを開始（一時停止中は再開） |
 | 停止 | タイマーを一時停止 |
 | リセット | タイマーを初期状態に戻す |
 | 設定 | 作業時間・休憩時間を変更 |
@@ -48,6 +48,32 @@ pomodoro --version  # バージョンを表示
 
 ```bash
 nix profile add github:nazozokc/pomodoro-cli?ref=v1.2.0
+```
+
+## ソースからビルド
+
+### Node.js
+
+```bash
+git clone https://github.com/nazozokc/pomodoro-cli
+cd pomodoro-cli
+npm install
+node src/index.js
+```
+
+### Nix
+
+```bash
+git clone https://github.com/nazozokc/pomodoro-cli
+cd pomodoro-cli
+nix build
+./result/bin/pomodoro
+```
+
+開発シェルに入る場合：
+
+```bash
+nix develop
 ```
 
 ## License
