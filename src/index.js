@@ -8,17 +8,24 @@ import logUpdate from 'log-update';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const pkg = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8'));
+const packageJson = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8'));
 
 if (process.argv.includes('--version')) {
-  console.log(pkg.version);
+  console.log(packageJson.version);
   process.exit(0);
 }
 
-let WORK_TIME = 25 * 60;
-let SHORT_BREAK = 5 * 60;
-let LONG_BREAK = 15 * 60;
-const SESSIONS_BEFORE_LONG_BREAK = 4;
+const DEFAULT_workTimeSeconds_SECONDS = 25 * 60;
+const DEFAULT_shortBreakSeconds_SECONDS = 5 * 60;
+const DEFAULT_WORK_TIME_SECONDS = 25 * 60;
+const DEFAULT_SHORT_BREAK_SECONDS = 5 * 60;
+const DEFAULT_LONG_BREAK_SECONDS = 15 * 60;
+const DEFAULT_SESSIONS_BEFORE_LONG_BREAK = 4;
+
+let workTimeSeconds = DEFAULT_WORK_TIME_SECONDS;
+let shortBreakSeconds = DEFAULT_SHORT_BREAK_SECONDS;
+let longBreakSeconds = DEFAULT_LONG_BREAK_SECONDS;
+let sessionsBeforeLongBreak = DEFAULT_SESSIONS_BEFORE_LONG_BREAK;
 
 const STATE = { IDLE: 'idle', WORKING: 'working', BREAK: 'break' };
 
@@ -32,9 +39,9 @@ let notification = null; // { text, color, expireAt }
 
 let timerState = {
   state: STATE.IDLE,
-  remaining: WORK_TIME,
+  remaining: workTimeSeconds,
   session: 1,
-  totalSessions: SESSIONS_BEFORE_LONG_BREAK,
+  totalSessions: sessionsBeforeLongBreak,
   isPaused: false,
   breakType: null, // 'short' | 'long' | null
 };
@@ -55,18 +62,124 @@ const c = {
   green: '\x1b[38;5;121m',
 };
 
-// ── 文字幅計算 ────────────────────────────────────────────
 function displayWidth(str) {
   const plain = str.replace(/\x1b\[[0-9;]*m/g, '');
   let width = 0;
   for (const ch of plain) {
     const cp = ch.codePointAt(0);
     if (
-      (cp >= 0x1F000 && cp <= 0x1FFFF) ||  // 絵文字 (🎉 など)
-      (cp >= 0x3000 && cp <= 0x9FFF) ||   // CJK（日本語・漢字など）
+      (cp >= 0x1100 && cp <= 0x115F) ||
+      (cp >= 0x231A && cp <= 0x231B) ||
+      (cp >= 0x2328 && cp <= 0x2328) ||
+      (cp >= 0x23E9 && cp <= 0x23F3) ||
+      (cp >= 0x23F8 && cp <= 0x23FA) ||
+      (cp >= 0x25FD && cp <= 0x25FE) ||
+      (cp >= 0x2614 && cp <= 0x2615) ||
+      (cp >= 0x2648 && cp <= 0x2653) ||
+      (cp >= 0x267F && cp <= 0x267F) ||
+      (cp >= 0x2693 && cp <= 0x2693) ||
+      (cp >= 0x26A1 && cp <= 0x26A1) ||
+      (cp >= 0x26AA && cp <= 0x26AB) ||
+      (cp >= 0x26BD && cp <= 0x26BE) ||
+      (cp >= 0x26C4 && cp <= 0x26C5) ||
+      (cp >= 0x26CE && cp <= 0x26CE) ||
+      (cp >= 0x26D4 && cp <= 0x26D4) ||
+      (cp >= 0x26EA && cp <= 0x26EA) ||
+      (cp >= 0x26F2 && cp <= 0x26F3) ||
+      (cp >= 0x26F5 && cp <= 0x26F5) ||
+      (cp >= 0x26FA && cp <= 0x26FA) ||
+      (cp >= 0x26FD && cp <= 0x26FD) ||
+      (cp >= 0x2702 && cp <= 0x2702) ||
+      (cp >= 0x2705 && cp <= 0x2705) ||
+      (cp >= 0x2708 && cp <= 0x270D) ||
+      (cp >= 0x270F && cp <= 0x270F) ||
+      (cp >= 0x2728 && cp <= 0x2728) ||
+      (cp >= 0x274C && cp <= 0x274C) ||
+      (cp >= 0x274E && cp <= 0x274E) ||
+      (cp >= 0x2753 && cp <= 0x2755) ||
+      (cp >= 0x2757 && cp <= 0x2757) ||
+      (cp >= 0x2795 && cp <= 0x2797) ||
+      (cp >= 0x27A1 && cp <= 0x27A1) ||
+      (cp >= 0x27B0 && cp <= 0x27B0) ||
+      (cp >= 0x27BF && cp <= 0x27BF) ||
+      (cp >= 0x2934 && cp <= 0x2935) ||
+      (cp >= 0x2B05 && cp <= 0x2B07) ||
+      (cp >= 0x2B1B && cp <= 0x2B1C) ||
+      (cp >= 0x2B50 && cp <= 0x2B50) ||
+      (cp >= 0x2B55 && cp <= 0x2B55) ||
+      (cp >= 0x2E80 && cp <= 0x2EFF) ||
+      (cp >= 0x2F00 && cp <= 0x2FDF) ||
+      (cp >= 0x2FF0 && cp <= 0x2FFF) ||
+      (cp >= 0x3000 && cp <= 0x303F) ||
+      (cp >= 0x3040 && cp <= 0x309F) ||
+      (cp >= 0x30A0 && cp <= 0x30FF) ||
+      (cp >= 0x3100 && cp <= 0x312F) ||
+      (cp >= 0x3130 && cp <= 0x318F) ||
+      (cp >= 0x3190 && cp <= 0x319F) ||
+      (cp >= 0x31A0 && cp <= 0x31BF) ||
+      (cp >= 0x31C0 && cp <= 0x31EF) ||
+      (cp >= 0x31F0 && cp <= 0x31FF) ||
+      (cp >= 0x3200 && cp <= 0x32FF) ||
+      (cp >= 0x3300 && cp <= 0x33FF) ||
+      (cp >= 0x3400 && cp <= 0x4DBF) ||
+      (cp >= 0x4E00 && cp <= 0x9FFF) ||
+      (cp >= 0xA000 && cp <= 0xA48F) ||
+      (cp >= 0xA490 && cp <= 0xA4CF) ||
+      (cp >= 0xAC00 && cp <= 0xD7AF) ||
       (cp >= 0xF900 && cp <= 0xFAFF) ||
+      (cp >= 0xFE10 && cp <= 0xFE1F) ||
       (cp >= 0xFE30 && cp <= 0xFE4F) ||
-      (cp >= 0xFF00 && cp <= 0xFF60)        // 全角英数
+      (cp >= 0xFE50 && cp <= 0xFE6F) ||
+      (cp >= 0xFF00 && cp <= 0xFF60) ||
+      (cp >= 0xFFE0 && cp <= 0xFFE6) ||
+      (cp >= 0x1F004 && cp <= 0x1F004) ||
+      (cp >= 0x1F0CF && cp <= 0x1F0CF) ||
+      (cp >= 0x1F18E && cp <= 0x1F18E) ||
+      (cp >= 0x1F191 && cp <= 0x1F19A) ||
+      (cp >= 0x1F200 && cp <= 0x1F202) ||
+      (cp >= 0x1F210 && cp <= 0x1F23B) ||
+      (cp >= 0x1F240 && cp <= 0x1F248) ||
+      (cp >= 0x1F250 && cp <= 0x1F251) ||
+      (cp >= 0x1F260 && cp <= 0x1F265) ||
+      (cp >= 0x1F300 && cp <= 0x1F320) ||
+      (cp >= 0x1F32D && cp <= 0x1F335) ||
+      (cp >= 0x1F337 && cp <= 0x1F37C) ||
+      (cp >= 0x1F37E && cp <= 0x1F393) ||
+      (cp >= 0x1F3A0 && cp <= 0x1F3CA) ||
+      (cp >= 0x1F3CF && cp <= 0x1F3D3) ||
+      (cp >= 0x1F3E0 && cp <= 0x1F3F0) ||
+      (cp >= 0x1F3F4 && cp <= 0x1F3F4) ||
+      (cp >= 0x1F3F8 && cp <= 0x1F43E) ||
+      (cp >= 0x1F440 && cp <= 0x1F440) ||
+      (cp >= 0x1F442 && cp <= 0x1F4FC) ||
+      (cp >= 0x1F4FF && cp <= 0x1F53D) ||
+      (cp >= 0x1F54B && cp <= 0x1F54E) ||
+      (cp >= 0x1F550 && cp <= 0x1F567) ||
+      (cp >= 0x1F57A && cp <= 0x1F57A) ||
+      (cp >= 0x1F595 && cp <= 0x1F596) ||
+      (cp >= 0x1F5A4 && cp <= 0x1F5A4) ||
+      (cp >= 0x1F5FB && cp <= 0x1F64F) ||
+      (cp >= 0x1F680 && cp <= 0x1F6C5) ||
+      (cp >= 0x1F6CC && cp <= 0x1F6CC) ||
+      (cp >= 0x1F6D0 && cp <= 0x1F6D2) ||
+      (cp >= 0x1F6D5 && cp <= 0x1F6D7) ||
+      (cp >= 0x1F6EB && cp <= 0x1F6EC) ||
+      (cp >= 0x1F6F4 && cp <= 0x1F6FC) ||
+      (cp >= 0x1F7E0 && cp <= 0x1F7EB) ||
+      (cp >= 0x1F90C && cp <= 0x1F93A) ||
+      (cp >= 0x1F93C && cp <= 0x1F945) ||
+      (cp >= 0x1F947 && cp <= 0x1F978) ||
+      (cp >= 0x1F97A && cp <= 0x1F9CB) ||
+      (cp >= 0x1F9CD && cp <= 0x1F9FF) ||
+      (cp >= 0x1FA70 && cp <= 0x1FA74) ||
+      (cp >= 0x1FA78 && cp <= 0x1FA7A) ||
+      (cp >= 0x1FA80 && cp <= 0x1FA86) ||
+      (cp >= 0x1FA90 && cp <= 0x1FAA8) ||
+      (cp >= 0x1FAB0 && cp <= 0x1FAB6) ||
+      (cp >= 0x1FAC0 && cp <= 0x1FAC2) ||
+      (cp >= 0x1FAD0 && cp <= 0x1FAD6) ||
+      (cp >= 0x20000 && cp <= 0x2FFFD) ||
+      (cp >= 0x30000 && cp <= 0x3FFFD)
     ) {
       width += 2;
     } else {
@@ -137,10 +250,10 @@ function buildTimerRows() {
   const accent = isWorking ? c.amber : isBreak ? c.mint : c.slate;
 
   const totalTime = isWorking
-    ? WORK_TIME
+    ? workTimeSeconds
     : isBreak
-      ? (breakType === 'long' ? LONG_BREAK : SHORT_BREAK)
-      : WORK_TIME;
+      ? (breakType === 'long' ? longBreakSeconds : shortBreakSeconds)
+      : workTimeSeconds;
 
   // 時間 + 状態 (両端揃え)
   const timeRaw = formatTime(remaining);
@@ -222,9 +335,9 @@ function buildMenuRows() {
 // ── 設定選択行 ────────────────────────────────────────────
 function currentSettings() {
   return [
-    { label: `作業時間     ${String(Math.floor(WORK_TIME / 60)).padStart(2)} min`, key: 'work' },
-    { label: `短い休憩     ${String(Math.floor(SHORT_BREAK / 60)).padStart(2)} min`, key: 'shortBreak' },
-    { label: `長い休憩     ${String(Math.floor(LONG_BREAK / 60)).padStart(2)} min`, key: 'longBreak' },
+    { label: `作業時間     ${String(Math.floor(workTimeSeconds / 60)).padStart(2)} min`, key: 'work' },
+    { label: `短い休憩     ${String(Math.floor(shortBreakSeconds / 60)).padStart(2)} min`, key: 'shortBreak' },
+    { label: `長い休憩     ${String(Math.floor(longBreakSeconds / 60)).padStart(2)} min`, key: 'longBreak' },
     { label: `セッション数   ${timerState.totalSessions}`, key: 'sessions' },
     { label: '< Back', key: 'back' },
   ];
@@ -268,7 +381,7 @@ function buildInputRows() {
 
 // ── 全体描画 (単一ボックス) ───────────────────────────────
 function render() {
-  const versionStr = `v${pkg.version}`;
+  const versionStr = `v${packageJson.version}`;
   const headerPad = W - 1 - 8 - versionStr.length;
   const header = ` ${c.bold}${c.white}POMODORO${c.reset}${' '.repeat(Math.max(0, headerPad))}${c.charcoal}${versionStr}${c.reset}`;
 
@@ -319,14 +432,14 @@ function handleTimerComplete() {
   if (wasWorking) {
     if (timerState.session >= timerState.totalSessions) {
       timerState.state = STATE.BREAK;
-      timerState.remaining = LONG_BREAK;
+      timerState.remaining = longBreakSeconds;
       timerState.session = 1;
       timerState.isPaused = false;
       timerState.breakType = 'long';
       notify('全セッション完了！長い休憩', c.amber);
     } else {
       timerState.state = STATE.BREAK;
-      timerState.remaining = SHORT_BREAK;
+      timerState.remaining = shortBreakSeconds;
       timerState.isPaused = false;
       timerState.breakType = 'short';
       notify(`セッション${timerState.session}完了！短い休憩 (5分)`, c.mint);
@@ -336,100 +449,100 @@ function handleTimerComplete() {
       timerState.session++;
     }
     timerState.state = STATE.WORKING;
-    timerState.remaining = WORK_TIME;
+    timerState.remaining = workTimeSeconds;
     timerState.isPaused = false;
     timerState.breakType = null;
     notify('作業開始！', c.amber);
   }
 }
 
-// ── キー操作 ──────────────────────────────────────────────
+const KEY = {
+  ESC: '\x1b',
+  UP: '\x1b[A',
+  DOWN: '\x1b[B',
+  ENTER: '\r',
+  CTRL_C: '\x03',
+  BACK: '\x7f',
+};
+
 function handleKey(key) {
-  const ESC = '\x1b';
-  const UP = '\x1b[A';
-  const DOWN = '\x1b[B';
-  const ENTER = '\r';
-  const CTRL_C = '\x03';
-  const BACK = '\x7f';
+  if (key === KEY.CTRL_C) exit();
 
-  if (key === CTRL_C) exit();
+  const handlers = {
+    timer: handleTimerMode,
+    menu: handleMenuMode,
+    settings_select: handleSettingsSelectMode,
+    settings_input: handleSettingsInputMode,
+  };
 
-  // ── timer モード ──
-  if (mode === 'timer') {
-    if (key === 'm') { mode = 'menu'; menuIndex = 0; }
-    else if (key === 's') actionStart();
-    else if (key === 'p') actionPause();
-    else if (key === 'r') actionReset();
-    else if (key === 'q') exit();
-    render();
-    return;
+  const handler = handlers[mode];
+  if (handler) handler(key);
+  render();
+}
+
+function handleTimerMode(key) {
+  if (key === 'm') { mode = 'menu'; menuIndex = 0; }
+  else if (key === 's') actionStart();
+  else if (key === 'p') actionPause();
+  else if (key === 'r') actionReset();
+  else if (key === 'q') exit();
+}
+
+function handleMenuMode(key) {
+  if (key === KEY.UP) menuIndex = (menuIndex - 1 + MENU_ITEMS.length) % MENU_ITEMS.length;
+  if (key === KEY.DOWN) menuIndex = (menuIndex + 1) % MENU_ITEMS.length;
+  if (key === KEY.ESC) mode = 'timer';
+  if (key === KEY.ENTER) {
+    const item = MENU_ITEMS[menuIndex];
+    mode = 'timer';
+    if (item.key === 's') actionStart();
+    else if (item.key === 'p') actionPause();
+    else if (item.key === 'r') actionReset();
+    else if (item.key === 'c') { mode = 'settings_select'; settingsIndex = 0; }
+    else if (item.key === 'q') exit();
   }
+}
 
-  // ── menu モード ──
-  if (mode === 'menu') {
-    if (key === UP) menuIndex = (menuIndex - 1 + MENU_ITEMS.length) % MENU_ITEMS.length;
-    if (key === DOWN) menuIndex = (menuIndex + 1) % MENU_ITEMS.length;
-    if (key === ESC) mode = 'timer';
-    if (key === ENTER) {
-      const item = MENU_ITEMS[menuIndex];
+function handleSettingsSelectMode(key) {
+  const items = currentSettings();
+  if (key === KEY.UP) settingsIndex = (settingsIndex - 1 + items.length) % items.length;
+  if (key === KEY.DOWN) settingsIndex = (settingsIndex + 1) % items.length;
+  if (key === KEY.ESC) mode = 'timer';
+  if (key === KEY.ENTER) {
+    const item = items[settingsIndex];
+    if (item.key === 'back') {
       mode = 'timer';
-      if (item.key === 's') actionStart();
-      else if (item.key === 'p') actionPause();
-      else if (item.key === 'r') actionReset();
-      else if (item.key === 'c') { mode = 'settings_select'; settingsIndex = 0; }
-      else if (item.key === 'q') exit();
+    } else {
+      inputTarget = item.key;
+      inputBuffer = '';
+      mode = 'settings_input';
     }
-    render();
-    return;
   }
+}
 
-  // ── settings_select モード ──
-  if (mode === 'settings_select') {
-    const items = currentSettings();
-    if (key === UP) settingsIndex = (settingsIndex - 1 + items.length) % items.length;
-    if (key === DOWN) settingsIndex = (settingsIndex + 1) % items.length;
-    if (key === ESC) mode = 'timer';
-    if (key === ENTER) {
-      const item = items[settingsIndex];
-      if (item.key === 'back') {
-        mode = 'timer';
-      } else {
-        inputTarget = item.key;
-        inputBuffer = '';
-        mode = 'settings_input';
-      }
-    }
-    render();
-    return;
-  }
-
-  // ── settings_input モード ──
-  if (mode === 'settings_input') {
-    if (key === ESC) {
+function handleSettingsInputMode(key) {
+  if (key === KEY.ESC) {
+    mode = 'settings_select';
+  } else if (key === KEY.BACK) {
+    inputBuffer = inputBuffer.slice(0, -1);
+  } else if (key === KEY.ENTER) {
+    const val = parseInt(inputBuffer);
+    if (!isNaN(val) && val > 0) {
+      applySettings(inputTarget, val);
+      notify(`${inputTarget} -> ${val}`, c.mint);
       mode = 'settings_select';
-    } else if (key === BACK) {
-      inputBuffer = inputBuffer.slice(0, -1);
-    } else if (key === ENTER) {
-      const val = parseInt(inputBuffer);
-      if (!isNaN(val) && val > 0) {
-        applySettings(inputTarget, val);
-        notify(`${inputTarget} -> ${val}`, c.mint);
-        mode = 'settings_select';
-      } else {
-        notify('正の整数を入力してください', c.red);
-      }
-    } else if (/^\d$/.test(key)) {
-      inputBuffer += key;
+    } else {
+      notify('正の整数を入力してください', c.red);
     }
-    render();
-    return;
+  } else if (/^\d$/.test(key)) {
+    inputBuffer += key;
   }
 }
 
 function actionStart() {
   if (timerState.state === STATE.IDLE) {
     timerState.state = STATE.WORKING;
-    timerState.remaining = WORK_TIME;
+    timerState.remaining = workTimeSeconds;
     timerState.breakType = null;
   }
   timerState.isPaused = false;
@@ -443,7 +556,7 @@ function actionPause() {
 
 function actionReset() {
   timerState.state = STATE.IDLE;
-  timerState.remaining = WORK_TIME;
+  timerState.remaining = workTimeSeconds;
   timerState.session = 1;
   timerState.isPaused = false;
   timerState.breakType = null;
@@ -453,19 +566,19 @@ function actionReset() {
 function applySettings(key, val) {
   switch (key) {
     case 'work':
-      WORK_TIME = val * 60;
-      if (timerState.state === STATE.IDLE) timerState.remaining = WORK_TIME;
+      workTimeSeconds = val * 60;
+      if (timerState.state === STATE.IDLE) timerState.remaining = workTimeSeconds;
       break;
     case 'shortBreak':
-      SHORT_BREAK = val * 60;
+      shortBreakSeconds = val * 60;
       if (timerState.state === STATE.BREAK && timerState.breakType === 'short') {
-        timerState.remaining = SHORT_BREAK;
+        timerState.remaining = shortBreakSeconds;
       }
       break;
     case 'longBreak':
-      LONG_BREAK = val * 60;
+      longBreakSeconds = val * 60;
       if (timerState.state === STATE.BREAK && timerState.breakType === 'long') {
-        timerState.remaining = LONG_BREAK;
+        timerState.remaining = longBreakSeconds;
       }
       break;
     case 'sessions':
